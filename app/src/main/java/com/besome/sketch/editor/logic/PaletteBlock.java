@@ -114,21 +114,79 @@ public class PaletteBlock extends LinearLayout {
         if (name == null || name.isEmpty()) {
             return "";
         }
+
+        // Specific workaround for "toast"
+        if ("toast".equalsIgnoreCase(name)) {
+            return "Toast";
+        }
+
+        // Pre-process the name: replace underscores with spaces.
+        // This helps if opCodes are like "read_file_at_path".
+        String processedName = name.replace('_', ' ');
+
         StringBuilder result = new StringBuilder();
-        result.append(name.charAt(0));
-        for (int i = 1; i < name.length(); i++) {
-            char currentChar = name.charAt(i);
-            if (Character.isUpperCase(currentChar)) {
-                // Check if previous char is not already a space (for acronyms like "HTTPExample")
-                // and if the current char is not part of an acronym (e.g. the TTP in HTTP)
-                // For simplicity here, just add a space before any uppercase unless it's followed by lowercase.
-                if (i + 1 < name.length() && Character.isLowerCase(name.charAt(i+1)) || Character.isLowerCase(name.charAt(i-1))) {
+
+        // Ensure the result doesn't start with a space if the first char of processedName is a space
+        int startIndex = 0;
+        while(startIndex < processedName.length() && processedName.charAt(startIndex) == ' ') {
+            startIndex++;
+        }
+
+        if (startIndex < processedName.length()) {
+            // Append the first non-space character
+            result.append(processedName.charAt(startIndex));
+        } else {
+            // The string was all spaces or empty after underscore replacement
+            return "";
+        }
+
+        for (int i = startIndex + 1; i < processedName.length(); i++) {
+            char currentChar = processedName.charAt(i);
+            char prevChar = processedName.charAt(i - 1); // Safe, because we start from startIndex + 1
+
+            if (currentChar == ' ') {
+                // If current is a space, only add it if the last char in result is not already a space.
+                if (result.length() > 0 && result.charAt(result.length() - 1) != ' ') {
                     result.append(' ');
                 }
+            } else if (Character.isUpperCase(currentChar)) {
+                if (Character.isLowerCase(prevChar)) {
+                    // Case: lowerUpper (e.g., "setActivity" -> "set Activity")
+                    // Add space only if prevChar was not a space itself
+                    if (prevChar != ' ') result.append(' ');
+                } else if (Character.isUpperCase(prevChar) && prevChar != ' ') {
+                    // Case: UpperUpper (e.g., "XMLHTTPRequest")
+                    // Add space if current char is followed by a lowercase letter (e.g., before 'H' in XMLHttp)
+                    if (i + 1 < processedName.length() && Character.isLowerCase(processedName.charAt(i + 1))) {
+                        result.append(' ');
+                    }
+                }
+                // If prevChar was a space, no need to add another space here.
+                result.append(currentChar);
+            } else if (Character.isLowerCase(currentChar)) {
+                // If prevChar was an uppercase letter AND part of an acronym (e.g. G in JPEG, current is d in JPEGdemo)
+                // and no space was added before, it means prevChar was the end of an acronym.
+                // This case is complex. The UpperCase logic should handle most splits.
+                // Example: "JPEGDemo" -> "JPEG" then space then "Demo"
+                // The previous iteration handles space before D in JPEGDemo if JPEG is followed by Demo.
+                result.append(currentChar);
+            } else if (Character.isDigit(currentChar)) {
+                // Add space before a digit if the previous char was a letter and not a space
+                if (Character.isLetter(prevChar) && prevChar != ' ') {
+                    result.append(' ');
+                }
+                result.append(currentChar);
+            } else {
+                // Other symbols. Add a space if previous char was not a space and current is not a space.
+                // This helps separate symbols from words, e.g. "word.symbol" -> "word . symbol"
+                if (prevChar != ' ' && result.charAt(result.length() -1) != ' ') {
+                     result.append(' ');
+                }
+                result.append(currentChar);
             }
-            result.append(currentChar);
         }
-        return result.toString();
+        // Final cleanup: trim and replace multiple spaces with a single space.
+        return result.toString().trim().replaceAll(" +", " ");
     }
 
     private LinearLayout.LayoutParams getLayoutParams(float heightMultiplier) {
